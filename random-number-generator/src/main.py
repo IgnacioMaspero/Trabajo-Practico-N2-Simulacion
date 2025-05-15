@@ -69,9 +69,9 @@ def prueba_bondad_de_ajuste(datos, distribucion, nombre_distribucion, intervalos
     if len(datos) >= 30:
         # Prueba de Chi-cuadrado
         observed, bin_edges = np.histogram(datos, bins=intervalos)
-        expected = len(datos) * np.diff(distribucion.cdf(bin_edges))
+        expected = len(datos) * np.diff(distribucion.cdf(bin_edges)) # Marca de Clase
         chi2_stat = np.sum((expected - observed) ** 2 / expected)
-        p_valor = chi2.sf(chi2_stat, df=intervalos - 1)
+        p_valor = chi2.sf(chi2_stat, df=intervalos - 1)  #probabilidad de obtener un valor mayor que chi2_stat
         resultado = f"\nPrueba de CHI-Cuadrado para distribucion {nombre_distribucion}:\n"
         resultado += f"Estadistico de prueba: {chi2_stat}\nP-valor: {p_valor}\n"
         if p_valor > 0.05:
