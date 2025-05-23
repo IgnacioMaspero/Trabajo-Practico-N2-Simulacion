@@ -41,10 +41,6 @@ def generar_y_analizar():
         else:
             raise ValueError("Distribución invalida!!")
 
-        # Mostrar los primeros 1000 números generados
-        print("\nPrimeros 1000 numeros aleatorios generados:")
-        print(numeros_aleatorios[:1000])
-
         # Realizar la prueba de bondad de ajuste
         prueba_bondad_de_ajuste(numeros_aleatorios, dist, distribucion, intervalos)
 
