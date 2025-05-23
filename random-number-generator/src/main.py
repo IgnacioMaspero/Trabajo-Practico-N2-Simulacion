@@ -34,7 +34,7 @@ def generar_y_analizar():
         elif distribucion == "Normal":
             media = float(param1_entry.get())
             desviacion = float(param2_entry.get())
-            if media <= 0 or desviacion <= 0:
+            if desviacion <= 0:
                 raise ValueError("En la distribución normal, la media y la desviación estándar deben ser mayores a 0.")
             numeros_aleatorios = generar_normal(tamano_de_muestra, media, desviacion)
             dist = norm(loc=media, scale=desviacion)
