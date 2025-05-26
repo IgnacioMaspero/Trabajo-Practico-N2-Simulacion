@@ -35,11 +35,16 @@ def generar_y_analizar():
             media = float(param1_entry.get())
             desviacion = float(param2_entry.get())
             if desviacion <= 0:
-                raise ValueError("En la distribución normal, la media y la desviación estándar deben ser mayores a 0.")
+                raise ValueError("En la distribución normal la desviación estándar debe ser mayor a 0.")
             numeros_aleatorios = generar_normal(tamano_de_muestra, media, desviacion)
             dist = norm(loc=media, scale=desviacion)
         else:
             raise ValueError("Distribución invalida!!")
+
+        # Mostrar los primeros 1000 números generados en el widget de texto
+        text_widget.delete("1.0", tk.END)  # Limpiar el contenido previo
+        primeros_numeros = numeros_aleatorios[:1000]
+        text_widget.insert(tk.END, "\n".join(map(str, primeros_numeros)))
 
         # Realizar la prueba de bondad de ajuste
         prueba_bondad_de_ajuste(numeros_aleatorios, dist, distribucion, intervalos)
@@ -61,13 +66,78 @@ def plot_histogram(datos, intervalos):
     plt.tight_layout()
     plt.show()
 
+def agrupar_intervalos(observed, expected, bin_edges):
+    new_observed = []
+    new_expected = []
+    new_bin_edges = [bin_edges[0]]
+
+    acumulado_observed = 0
+    acumulado_expected = 0
+
+    for i in range(len(expected)):
+        acumulado_observed += observed[i]
+        acumulado_expected += expected[i]
+
+        if acumulado_expected >= 5:
+            new_observed.append(acumulado_observed)
+            new_expected.append(acumulado_expected)
+            new_bin_edges.append(bin_edges[i + 1])
+            acumulado_observed = 0
+            acumulado_expected = 0
+
+    # Si quedan intervalos sin agrupar, agrégalos al último intervalo
+    if acumulado_expected > 0:
+        new_observed[-1] += acumulado_observed
+        new_expected[-1] += acumulado_expected
+
+    return new_observed, new_expected, new_bin_edges
+
 def prueba_bondad_de_ajuste(datos, distribucion, nombre_distribucion, intervalos):
     if len(datos) >= 30:
         # Prueba de Chi-cuadrado
         observed, bin_edges = np.histogram(datos, bins=intervalos)
-        expected = len(datos) * np.diff(distribucion.cdf(bin_edges)) # Marca de Clase
+        expected = len(datos) * np.diff(distribucion.cdf(bin_edges))  # Marca de Clase
+
+        # Agrupar intervalos con frecuencias esperadas menores a 5
+        observed, expected, bin_edges = agrupar_intervalos(observed, expected, bin_edges)
+
+        # Configurar encabezados de la tabla para Chi-cuadrado
+        table_widget["columns"] = ("Intervalo", "Frecuencia Observada", "Frecuencia Esperada", "Chi", "Chi Acumulado")
+        table_widget.heading("Intervalo", text="Intervalo")
+        table_widget.heading("Frecuencia Observada", text="Frecuencia Observada")
+        table_widget.heading("Frecuencia Esperada", text="Frecuencia Esperada")
+        table_widget.heading("Chi", text="Chi")
+        table_widget.heading("Chi Acumulado", text="Chi Acumulado")
+
+        # Convertir las listas a arreglos de NumPy
+        observed = np.array(observed)
+        expected = np.array(expected)
+
+        # Calcular el estadístico de Chi-cuadrado
         chi2_stat = np.sum((expected - observed) ** 2 / expected)
-        p_valor = chi2.sf(chi2_stat, df=intervalos - 1)  #probabilidad de obtener un valor mayor que chi2_stat
+        p_valor = chi2.sf(chi2_stat, df=len(observed) - 1)  # grados de libertad ajustados
+
+        # Limpiar la tabla antes de llenarla
+        for row in table_widget.get_children():
+            table_widget.delete(row)
+
+        # Llenar la tabla con los datos de análisis
+        chi_acumulado = 0
+        for i in range(len(observed)):
+            chi = (expected[i] - observed[i]) ** 2 / expected[i]
+            chi_acumulado += chi
+            table_widget.insert("", "end", values=(
+                f"{bin_edges[i]:.2f} - {bin_edges[i+1]:.2f}",
+                f"{observed[i]:.2f}",
+                f"{expected[i]:.2f}",
+                f"{chi:.2f}",
+                f"{chi_acumulado:.2f}"
+            ))
+
+        # Mostrar el p-valor debajo de la tabla
+        p_value_label.config(text=f"P-valor: {p_valor:.5f}")
+
+        # Mostrar mensaje de resultado
         resultado = f"\nPrueba de CHI-Cuadrado para distribucion {nombre_distribucion}:\n"
         resultado += f"Estadistico de prueba: {chi2_stat}\nP-valor: {p_valor}\n"
         if p_valor > 0.05:
@@ -76,14 +146,53 @@ def prueba_bondad_de_ajuste(datos, distribucion, nombre_distribucion, intervalos
             resultado += "Los datos NO siguen la distribucion elegida (se rechazaza la H0)."
     else:
         # Prueba de Kolmogorov-Smirnov
-        ks_stat, p_valor = kstest(datos, distribucion.cdf)
-        resultado = f"\nPrueba de Kolmogorov-Smirnoff para distribucion {nombre_distribucion}:\n"
-        resultado += f"Estadistico de prueba: {ks_stat}\nP-valor: {p_valor}\n"
-        if p_valor > 0.05:
+        observed, bin_edges = np.histogram(datos, bins=intervalos)
+        cdf_observed = np.cumsum(observed) / len(datos)
+        cdf_expected = distribucion.cdf(bin_edges)
+
+        # Configurar encabezados de la tabla para Kolmogorov-Smirnov
+        table_widget["columns"] = ("Intervalo", "Frecuencia Observada", "Frecuencia Esperada", "Prob. Observada", "Prob. Esperada", "Estadístico KS", "KS Máximo")
+        table_widget.heading("Intervalo", text="Intervalo")
+        table_widget.heading("Frecuencia Observada", text="Frecuencia Observada")
+        table_widget.heading("Frecuencia Esperada", text="Frecuencia Esperada")
+        table_widget.heading("Prob. Observada", text="Prob. Observada")
+        table_widget.heading("Prob. Esperada", text="Prob. Esperada")
+        table_widget.heading("Estadístico KS", text="Estadístico KS")
+        table_widget.heading("KS Máximo", text="KS Máximo")
+
+        # Limpiar la tabla antes de llenarla
+        for row in table_widget.get_children():
+            table_widget.delete(row)
+
+        # Llenar la tabla con los datos de análisis
+        ks_stat_max = 0
+        for i in range(len(observed)):
+            prob_observed = cdf_observed[i]
+            prob_expected = cdf_expected[i]
+            ks_stat = abs(prob_observed - prob_expected)
+            ks_stat_max = max(ks_stat_max, ks_stat)
+
+            table_widget.insert("", "end", values=(
+                f"{bin_edges[i]:.2f} - {bin_edges[i+1]:.2f}",
+                f"{observed[i]:.2f}",
+                f"{len(datos) * (cdf_expected[i + 1] - cdf_expected[i]):.2f}",
+                f"{prob_observed:.5f}",
+                f"{prob_expected:.5f}",
+                f"{ks_stat:.5f}",
+                f"{ks_stat_max:.5f}"
+            ))
+
+        # Mostrar el p-valor debajo de la tabla
+        p_value_label.config(text=f"Estadístico KS máximo: {ks_stat_max:.5f}")
+
+        # Mostrar mensaje de resultado
+        resultado = f"\nPrueba de Kolmogorov-Smirnov para distribucion {nombre_distribucion}:\n"
+        resultado += f"Estadístico KS máximo: {ks_stat_max}\n"
+        if ks_stat_max < 1.36 / np.sqrt(len(datos)):  # Valor crítico aproximado para alfa=0.05
             resultado += "Los datos siguen la distribucion elegida (no es posible rechazar la H0)."
         else:
             resultado += "Los datos NO siguen la distribucion elegida (se rechazaza la H0)."
-    
+
     print(resultado)
     messagebox.showinfo("Resultados de la prueba de bondad de ajuste", resultado)
 
@@ -106,7 +215,7 @@ def on_distribution_change(event):
 
 # Crear la interfaz gráfica
 root = tk.Tk()
-root.geometry("800x600")
+root.geometry("1000x800")
 root.title("Generador de numeros aleatorios")
 
 # Tamaño de muestra
@@ -139,6 +248,27 @@ intervals_combobox.set(10)
 # Botón para generar
 generate_button = tk.Button(root, text="Generar y analizar", command=generar_y_analizar)
 generate_button.grid(row=5, column=0, columnspan=2)
+
+# Widget de texto para mostrar los números generados
+tk.Label(root, text="Primeros 1000 números generados:").grid(row=6, column=0, sticky="w")
+text_widget = tk.Text(root, height=15, width=50)
+text_widget.grid(row=7, column=0, columnspan=2)
+
+# Tabla para mostrar el análisis de Chi-cuadrado
+tk.Label(root, text="Tabla de análisis (Chi-cuadrado):").grid(row=8, column=0, sticky="w")
+table_widget = ttk.Treeview(root, columns=("Intervalo", "Frecuencia Observada", "Frecuencia Esperada", "Chi", "Chi Acumulado"), show="headings", height=10)
+table_widget.grid(row=9, column=0, columnspan=2)
+
+# Configurar encabezados de la tabla
+table_widget.heading("Intervalo", text="Intervalo")
+table_widget.heading("Frecuencia Observada", text="Frecuencia Observada")
+table_widget.heading("Frecuencia Esperada", text="Frecuencia Esperada")
+table_widget.heading("Chi", text="Chi")
+table_widget.heading("Chi Acumulado", text="Chi Acumulado")
+
+# Mostrar el p-valor debajo de la tabla
+p_value_label = tk.Label(root, text="P-valor: ")
+p_value_label.grid(row=10, column=0, columnspan=2)
 
 distribution_combobox.bind("<<ComboboxSelected>>", on_distribution_change)
 
